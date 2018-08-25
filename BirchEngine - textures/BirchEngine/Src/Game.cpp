@@ -1,8 +1,29 @@
 #include "Game.h"
 #include "TextureManager.h"
-#include "GameObject.h"
+#include "Map.h"
+#include "ECS/Components.h"
+#include "Vector2D.h"
+#include "Collision.h"
 
-GameObject* player;
+
+Map* map;
+Manager manager;
+
+SDL_Renderer* Game::renderer = nullptr;
+SDL_Event Game::event;
+
+std::vector<ColliderComponent*> Game::colliders;
+
+auto& player(manager.addEntity());
+auto& wall(manager.addEntity());
+
+enum groupLabels : std::size_t
+{
+	groupMap,
+	groupPlayers,
+	groupEnemies,
+	groupColliders
+};
 
 
 Game::Game()
@@ -32,15 +53,26 @@ void Game::init(const char* title, int width, int height, bool fullscreen)
 		isRunning = true;
 	}
 
-	player = new GameObject("assets/man.png", renderer,0,0);
+	
+	map = new Map();
 
+	Map::LoadMap("assets/p16x16.map", 16, 16);
 
+	player.addComponent<TransformComponent>(2);
+	player.addComponent<SpriteComponent>("assets/player_idle.png", 4, 250);
+	player.addComponent<KeyboardController>();
+	player.addComponent<ColliderComponent>("player");
+	player.addGroup(groupPlayers);
+
+	wall.addComponent<TransformComponent>(300.0f, 300.0f, 300, 20, 1);
+	wall.addComponent<SpriteComponent>("assets/dirt.png");
+	wall.addComponent<ColliderComponent>("wall");
+	wall.addGroup(groupMap);
 }
 
 void Game::handleEvents()
 {
-	SDL_Event event;
-
+	
 	SDL_PollEvent(&event);
 
 	switch (event.type)
@@ -55,13 +87,37 @@ void Game::handleEvents()
 
 void Game::update()
 {
-	player->Update();
+	manager.update();
+	manager.refresh();
+
+	for (auto cc : colliders)
+	{
+		Collision::AABB(player.getComponent<ColliderComponent>(), *cc);
+		
+	}
 }
+
+
+auto& tiles(manager.getGroup(groupMap));
+auto& players(manager.getGroup(groupPlayers));
+auto& enemies(manager.getGroup(groupEnemies));
 
 void Game::render()
 {
 	SDL_RenderClear(renderer);
-	player->Render();
+	for (auto& t : tiles)
+	{
+		t->draw();
+	}
+	for (auto& p : players)
+	{
+		p->draw();
+	}
+	for (auto& e : enemies)
+	{
+		e->draw();
+	}
+
 	SDL_RenderPresent(renderer);
 }
 
@@ -70,4 +126,11 @@ void Game::clean()
 	SDL_DestroyWindow(window);
 	SDL_DestroyRenderer(renderer);
 	SDL_Quit();
+}
+
+void Game::addTile(int id, int x, int y)
+{
+	auto& tile(manager.addEntity());
+	tile.addComponent<TileComponent>(x, y, 32, 32, id);
+	tile.addGroup(groupMap);
 }
